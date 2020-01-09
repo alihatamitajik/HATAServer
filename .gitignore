@@ -1,0 +1,25 @@
+
+bin/Release/Server.exe
+obj/Debug/functions.o
+obj/Debug/main.o
+obj/Release/main.o
+obj/Release/functions.o
+test cJSON.o
+test cJSON.exe
+test cJSON.c
+Server.layout
+Server.depend
+resources/members/hatam008.user.hata
+resources/members/8520.user.hata
+resources/channels/ujnhtgb.channel.hata
+resources/channels/KTBASSHOLE.channel.hata
+resources/channels/hgfhffgdhfgfhdgfhfhhsklk.channel.hata
+resources/channels/asdfghjkl.channel.hata
+resources/channels/asdf.channel.hata
+resources/channels/asd.channel.hata
+resources/channels/aaa.channel.hata
+resources/channels/8520258520258520.channel.hata
+resources/channels/741741.channel.hata
+resources/channels/741.channel.hata
+Server.depend
+Server.layout

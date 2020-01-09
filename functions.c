@@ -20,6 +20,7 @@ struct member {
     char name[128];
     char token[31];
     int id;
+    char chnlin[50];
 }memon[1000];
 int lastmem = 0;
 
@@ -28,6 +29,7 @@ struct channel{
     int mmbrids[50];
     int mmbronline;
 }chnlon[20];
+int lastchnl = 0;
 
 //AuthToken Generator-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 char *randstring() {
@@ -69,6 +71,11 @@ int IsValidAuthToken(char *tkn){
     }
     return 0;
 }
+//Match Client And Authtoken----------------------------------------------------------------------------------------------------------
+int FindMemmberIDbyToken(char *tkn)
+{
+
+}
 //Read operation Client want----------------------------------------------------------------------------------------------------------------------------------------
 int login(char buff[]);
 int createaccount(char buff[]);
@@ -81,7 +88,6 @@ int readoprate()
     else if(!strncmp(buffer,"register",8))createaccount(buffer);
     else if(!strncmp(buffer,"create channel",14))nwchnnl(buffer);
     return 0;
-
 }
 //Create Account------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 int createaccount(char buff[]) {
@@ -143,14 +149,64 @@ int login(char buff[]){
 }
 //Create New Channel--------------------------------------------------------------------------------------------------------
 int nwchnnl(char buff[]){
-    char chnlname[64],tkn[31],msg[500];
+    char chnlname[64],tkn[31],msg[500],route[500],temp[300],*out;
+    int makerid;
+    FILE *fp;
+
     sscanf(buff,"%*s %*s %[^','], %s",chnlname,tkn);
+    sprintf(route,"./resources/channels/%s.channel.hata",chnlname);
     if(IsValidAuthToken(tkn)){
 
+        //check if channel already exists-----------------------------------------------
+        if(access(route,F_OK) != -1){
+            sprintf(msg,"{\"type\":\"Error\",\"content\":\"A channel is exist with this name already...\"}");
+            send(client_socket, msg, sizeof(msg)+1, 0);
+            return 0;
+        }
+
+
+        //Making a new channel----------------------------------------------------------
+        else{
+            //Setting Values for Channel and it's first member
+            makerid = 1;
+            strcat(memon[makerid].chnlin,chnlname);
+            fp = fopen(route,"w");
+            lastchnl++;
+            chnlon[lastchnl].mmbronline = 1;
+            chnlon[lastchnl].mmbrids[chnlon[lastchnl].mmbronline-1]=makerid;
+            strcat(chnlon[lastchnl].name,chnlname);
+            //Creating JSON in Favor of Saving it in a file--------------------------------
+            cJSON *root, *cars, *car;
+            /* create root node and array */
+            root = cJSON_CreateObject();
+            cars = cJSON_CreateArray();
+
+            /* add cars array to root */
+            cJSON_AddItemToObject(root, "messages", cars);
+
+            /* add 1st car to cars array */
+            cJSON_AddItemToArray(cars, car = cJSON_CreateObject());
+            cJSON_AddItemToObject(car, "sender", cJSON_CreateString("SERVER"));
+            sprintf(temp,"%s",chnlname);
+            cJSON_AddItemToObject(car, "message", cJSON_CreateString(temp));
+
+            /* print everything */
+            out = cJSON_Print(root);
+            fprintf(fp,"%s",out);
+            free(out);
+
+            /* free all objects under root and root itself */
+            cJSON_Delete(root);
+            fclose(fp);
+            sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+            send(client_socket, msg, sizeof(msg)+1, 0);
+        }
     }
+    //IF Contact enter a wrong authtoken---------------------------------------------
     else {
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
+        return 0;
     }
 
 }

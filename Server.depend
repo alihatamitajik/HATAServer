@@ -40,3 +40,35 @@
 	<unistd.h>
 	"cJSON.h"
 
+1578578526 source:d:\educational\university\semester '98-99' (1)\fop\project hatam\02.server\server\hataserver\main.c
+	<stdio.h>
+	<winsock2.h>
+	<stdlib.h>
+	<windows.h>
+	<string.h>
+	<stdbool.h>
+	"cJSON.h"
+
+1423841002 d:\educational\university\semester '98-99' (1)\fop\project hatam\02.server\server\hataserver\cjson.h
+
+1578600163 source:d:\educational\university\semester '98-99' (1)\fop\project hatam\02.server\server\hataserver\functions.c
+	<stdio.h>
+	<winsock2.h>
+	<stdlib.h>
+	<windows.h>
+	<string.h>
+	<stdbool.h>
+	<unistd.h>
+	"cJSON.h"
+	"cJSON.c"
+
+1423841090 d:\educational\university\semester '98-99' (1)\fop\project hatam\02.server\server\hataserver\cjson.c
+	<string.h>
+	<stdio.h>
+	<math.h>
+	<stdlib.h>
+	<float.h>
+	<limits.h>
+	<ctype.h>
+	"cJSON.h"
+
