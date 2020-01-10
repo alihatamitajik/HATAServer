@@ -11,7 +11,8 @@
 
 #define PORT 12345
 #define SA struct sockaddr
-
+void RGCH();
+void RGMM();
 int server_socket, client_socket;
 struct sockaddr_in server, client;
 

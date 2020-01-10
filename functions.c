@@ -20,6 +20,8 @@ struct sockaddr_in server, client;
 02. Change password
 03. Bio
 04. Last seen
+05. Private chat
+06. group
 */
 struct member {
     char name[128];
@@ -42,6 +44,7 @@ void RGCH(){
     FILE *fp;
     cJSON *root;
     char *chname,line[INT_MAX],route[150];
+
     if (NULL == (FD = opendir("./resources/channels")))
     {
         printf("Error : Failed to open input directory - %s\n", strerror(errno));
@@ -175,6 +178,7 @@ int nwchnnl(char buff[]);
 int JoinCh(char buff[]);
 int SendMsg(char buff[]);
 int refresh(char buff[]);
+int chnlmmbr(char buff[]);
 
 int readoprate()
 {
@@ -187,6 +191,7 @@ int readoprate()
     else if(!strncmp(buffer,"join channel",12))JoinCh(buffer);
     else if(!strncmp(buffer,"send",4))SendMsg(buffer);
     else if(!strncmp(buffer,"refresh",7))refresh(buffer);
+    else if(!strncmp(buffer,"channel members",15))chnlmmbr(buffer);
     else   {
         sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
@@ -453,4 +458,28 @@ int refresh(char buff[])
     cJSON_Delete(sendroot);
     cJSON_Delete(root);
     return 0;
+}
+//Channel Members---------------------------------------------------------------------------------------------------------------------
+int chnlmmbr(char buff[])
+{
+     char tkn[31],msg[INT_MAX],route[300];
+     sscanf(buff,"%*s %*s %s",tkn);
+     int mmid,chid,mmcnt;
+     mmid = FindMemmberIDbyToken(tkn);
+     chid = FindChannelByName(memon[mmid].chnlin);
+     mmcnt = chnlon[chid].mmbronline;
+
+     cJSON *sendroot,*sendmessages;
+     //Constructing a JSON to be sent------------------------------------------
+     sendroot = cJSON_CreateObject();
+     sendmessages = cJSON_CreateArray();
+     cJSON_AddItemToObject(sendroot, "type", cJSON_CreateString("List"));
+     cJSON_AddItemToObject(sendroot, "content", sendmessages);
+     for(int i=0;i<=chnlon[chid].mmbronline;i++){
+        cJSON_AddItemToArray(sendmessages, cJSON_CreateString(memon[chnlon[chid].mmbrids[i]].name));
+     }
+     sprintf(msg,"%s",cJSON_PrintUnformatted(sendroot));
+     send(client_socket, msg, sizeof(msg)+1, 0);
+     cJSON_Delete(sendroot);
+     return 0;
 }
