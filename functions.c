@@ -30,7 +30,7 @@ struct channel{
     char name[50];
     int mmbrids[50];
     int mmbronline;
-}chnlon[20];
+}chnlon[50];
 int lastchnl = -1;
 //Register All Channel----------------------------------------------------------------------------------------------------------------------------------------------
 void RGCH(){
@@ -169,16 +169,21 @@ int login(char buff[]);
 int createaccount(char buff[]);
 int nwchnnl(char buff[]);
 int JoinCh(char buff[]);
+int SendMsg(char buff[]);
 int readoprate()
 {
-    char buffer[1000];
+    char buffer[1000],msg[150];
     memset(buffer,0,sizeof(buffer));
     recv(client_socket, buffer, sizeof(buffer), 0);
-    if(!strncmp(buffer,"login",5))login(buffer);
+         if(!strncmp(buffer,"login",5))login(buffer);
     else if(!strncmp(buffer,"register",8))createaccount(buffer);
     else if(!strncmp(buffer,"create channel",14))nwchnnl(buffer);
     else if(!strncmp(buffer,"join channel",12))JoinCh(buffer);
-    printf("%s",memon[chnlon[0].mmbrids[0]].name);
+    else if(!strncmp(buffer,"send",4))SendMsg(buffer);
+    else   {
+        sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+        send(client_socket, msg, sizeof(msg)+1, 0);
+    }
     return 0;
 }
 //Create Account------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -310,8 +315,10 @@ int nwchnnl(char buff[]){
 //Join a Channel----------------------------------------------------------------------------------------------------------------------
 int JoinCh(char buff[])
 {
-    char chnm[64],tkn[31],msg[500],temp[300];
+    char chnm[64],tkn[31],msg[500],route[150],line[10000];
     int chid,mmid;
+    FILE *fp;
+
     sscanf(buff,"%*s %*s %[^','], %s",chnm,tkn);
     chid = FindChannelByName(chnm);
     mmid = FindMemmberIDbyToken(tkn);
@@ -325,9 +332,76 @@ int JoinCh(char buff[])
         send(client_socket, msg, sizeof(msg)+1, 0);
         return 0;
     }
-    chnlon[chid].mmbrids[++(chnlon->mmbronline)]=mmid;
+    chnlon[chid].mmbrids[++(chnlon[chid].mmbronline)]=mmid;
     strcat(memon[mmid].chnlin,chnm);
+
+    //Reading Latest channel file
+    sprintf(route,"./resources/channels/%s.channel.hata",chnlon[chid].name);
+    fp = fopen(route,"r");
+    fgets(line,sizeof line,fp);
+    fclose(fp);
+    //Adding new message to the array in channel file------------------------------
+    cJSON *root = cJSON_Parse(line);
+    cJSON *msg_array,*item;
+    msg_array = cJSON_GetObjectItem(root,"messages");
+    item = cJSON_CreateObject();
+    cJSON_AddItemToObject(item, "sender", cJSON_CreateString("SERVER"));
+    sprintf(msg,"%s Joined",memon[mmid].name);
+    cJSON_AddItemToObject(item, "message", cJSON_CreateString(msg));
+    cJSON_AddItemToArray(msg_array, item);
+    //REWrite new JSON in the file--------------------------------------------------
+    fp = fopen(route,"w");
+    fprintf(fp,"%s",cJSON_PrintUnformatted(root));
+    fclose(fp);
+    cJSON_Delete(root);
+
     sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
     send(client_socket, msg, sizeof(msg)+1, 0);
     return 0;
 }
+//Send Messages-----------------------------------------------------------------------------------------------------------------------
+int SendMsg(char buff[])
+{
+    char tkn[31],msg[500],route[300],line[10000];
+    int chid,mmid;
+    FILE *fp;
+    sscanf(buff,"%*s %[^','], %s",msg,tkn);
+    //Check if the AuthToken is a valid one----------------------------------------
+    mmid = FindMemmberIDbyToken(tkn);
+    if(mmid == -1){
+        sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
+        send(client_socket, msg, sizeof(msg)+1, 0);
+        return 0;
+    }
+
+    //check if member is in a channel or not---------------------------------------
+    chid = FindChannelByName(memon[mmid].chnlin);
+    if(chid == -1){
+        sprintf(msg,"{\"type\":\"Error\",\"content\":\"Invalid Command.\"}");
+        send(client_socket, msg, sizeof(msg)+1, 0);
+        return 0;
+    }
+
+    //Reading Latest channel file
+    sprintf(route,"./resources/channels/%s.channel.hata",chnlon[chid].name);
+    fp = fopen(route,"r");
+    fgets(line,sizeof line,fp);
+    fclose(fp);
+    //Adding new message to the array in channel file------------------------------
+    cJSON *root = cJSON_Parse(line);
+    cJSON *msg_array,*item;
+    msg_array = cJSON_GetObjectItem(root,"messages");
+    item = cJSON_CreateObject();
+    cJSON_AddItemToObject(item, "sender", cJSON_CreateString(memon[mmid].name));
+    cJSON_AddItemToObject(item, "message", cJSON_CreateString(msg));
+    cJSON_AddItemToArray(msg_array, item);
+    //REWrite new JSON in the file--------------------------------------------------
+    fp = fopen(route,"w");
+    fprintf(fp,"%s",cJSON_PrintUnformatted(root));
+    fclose(fp);
+    cJSON_Delete(root);
+    sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+    send(client_socket, msg, sizeof(msg)+1, 0);
+    return 0;
+}
+//Refresh-----------------------------------------------------------------------------------------------------------------------------

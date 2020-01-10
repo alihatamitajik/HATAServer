@@ -22,7 +22,7 @@ int main()
     int err;
     int oprate;
     wVersionRequested = MAKEWORD(2, 2);
-
+    char endprocess = 0;
     err = WSAStartup(wVersionRequested, &wsaData);
     if (err != 0) {
         // Tell the user that we could not find a usable Winsock DLL.
@@ -64,7 +64,6 @@ int main()
         printf("Server listening..\n");
 
     while(1){
-
         // Accept the data packet from client and verify
         int len = sizeof(client);
         client_socket = accept(server_socket, (SA *)&client, &len);
