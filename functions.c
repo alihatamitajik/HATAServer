@@ -5,6 +5,9 @@
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <errno.h>
+#include <dirent.h>
+#include <sys/types.h>
 #include "cJSON.h"
 #include "cJSON.c"
 
@@ -19,18 +22,92 @@ struct sockaddr_in server, client;
 struct member {
     char name[128];
     char token[31];
-    int id;
     char chnlin[50];
 }memon[1000];
-int lastmem = 0;
+int lastmem = -1;
 
 struct channel{
     char name[50];
     int mmbrids[50];
     int mmbronline;
 }chnlon[20];
-int lastchnl = 0;
+int lastchnl = -1;
+//Register All Channel----------------------------------------------------------------------------------------------------------------------------------------------
+void RGCH(){
+    DIR *FD;
+    struct dirent* in_file;
+    FILE *fp;
+    cJSON *root;
+    char *chname,line[10000],route[150];
+    if (NULL == (FD = opendir("./resources/channels")))
+    {
+        printf("Error : Failed to open input directory - %s\n", strerror(errno));
+        return 1;
+    }
+    while(in_file = readdir(FD)){
+        //Ignore Parent and child directories---
+        if (!strcmp (in_file->d_name, "."))
+            continue;
+        if (!strcmp (in_file->d_name, ".."))
+            continue;
+        //--------------------------------------
+        sprintf(route,"./resources/channels/%s",in_file->d_name);
+        fp = fopen(route, "r");
+        if(fp == NULL){
+             printf("Error : Failed to open input directory - %s\n", in_file->d_name);
+        }
+        else{
+            fgets(line,sizeof line,fp);
+            root = cJSON_Parse(line);
+            chname = cJSON_GetObjectItem(root,"chname")->valuestring;
+            lastchnl++;
+            strcat(chnlon[lastchnl].name,chname);
+            chnlon[lastchnl].mmbronline=0;
+            chnlon[lastchnl].mmbrids[0]=-1;
+            printf("%s Successfully registered.\n",chname);
+        }
+    }
+    free(chname);
+    cJSON_Delete(root);
 
+}
+//Register All Members---------------------------------------------------------------------------------------------------------------------------------------------
+void RGMM(){
+    DIR *FD;
+    struct dirent* in_file;
+    FILE *fp;
+    cJSON *root;
+    char *mmname,line[10000],route[150];
+    if (NULL == (FD = opendir("./resources/members")))
+    {
+        printf("Error : Failed to open input directory - %s\n", strerror(errno));
+        return 1;
+    }
+    while(in_file = readdir(FD)){
+        //Ignore Parent and child directories---
+        if (!strcmp (in_file->d_name, "."))
+            continue;
+        if (!strcmp (in_file->d_name, ".."))
+            continue;
+        //--------------------------------------
+        sprintf(route,"./resources/members/%s",in_file->d_name);
+        fp = fopen(route, "r");
+        if(fp == NULL){
+             printf("Error : Failed to open input directory - %s\n", in_file->d_name);
+        }
+        else{
+            fgets(line,sizeof line,fp);
+            root = cJSON_Parse(line);
+            mmname = cJSON_GetObjectItem(root,"username")->valuestring;
+            lastmem++;
+            strcat(memon[lastmem].name,mmname);
+            strcat(memon[lastmem].token,"\0");
+            strcat(memon[lastmem].chnlin,"\0");
+            printf("%s Successfully registered.\n",mmname);
+        }
+    }
+    cJSON_Delete(root);
+}
 //AuthToken Generator-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 char *randstring() {
     int length = 30;
@@ -74,7 +151,10 @@ int IsValidAuthToken(char *tkn){
 //Match Client And Authtoken----------------------------------------------------------------------------------------------------------
 int FindMemmberIDbyToken(char *tkn)
 {
-
+    for(int i=1;i<=lastmem;i++){
+        if(!strcmp(memon[i].token,tkn))return i;
+    }
+    return -1;
 }
 //Read operation Client want----------------------------------------------------------------------------------------------------------------------------------------
 int login(char buff[]);
@@ -168,7 +248,7 @@ int nwchnnl(char buff[]){
         //Making a new channel----------------------------------------------------------
         else{
             //Setting Values for Channel and it's first member
-            makerid = 1;
+            makerid = FindMemmberIDbyToken(tkn);
             strcat(memon[makerid].chnlin,chnlname);
             fp = fopen(route,"w");
             lastchnl++;
@@ -176,22 +256,23 @@ int nwchnnl(char buff[]){
             chnlon[lastchnl].mmbrids[chnlon[lastchnl].mmbronline-1]=makerid;
             strcat(chnlon[lastchnl].name,chnlname);
             //Creating JSON in Favor of Saving it in a file--------------------------------
-            cJSON *root, *cars, *car;
+            cJSON *root, *messages, *message;
             /* create root node and array */
             root = cJSON_CreateObject();
-            cars = cJSON_CreateArray();
+            messages = cJSON_CreateArray();
 
             /* add cars array to root */
-            cJSON_AddItemToObject(root, "messages", cars);
+            cJSON_AddItemToObject(root, "messages", messages);
 
-            /* add 1st car to cars array */
-            cJSON_AddItemToArray(cars, car = cJSON_CreateObject());
-            cJSON_AddItemToObject(car, "sender", cJSON_CreateString("SERVER"));
-            sprintf(temp,"%s",chnlname);
-            cJSON_AddItemToObject(car, "message", cJSON_CreateString(temp));
+            /* add 1st message to cars array */
+            cJSON_AddItemToArray(messages, message = cJSON_CreateObject());
+            cJSON_AddItemToObject(message, "sender", cJSON_CreateString("SERVER"));
+            sprintf(temp,"%s Created this Channel",memon[makerid].name);
+            cJSON_AddItemToObject(message, "message", cJSON_CreateString(temp));
 
+            cJSON_AddItemToObject(root,"chname",cJSON_CreateString(chnlname));
             /* print everything */
-            out = cJSON_Print(root);
+            out = cJSON_PrintUnformatted(root);
             fprintf(fp,"%s",out);
             free(out);
 

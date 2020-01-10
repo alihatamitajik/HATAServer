@@ -30,20 +30,23 @@ int main()
         return 1;
     }
 
-    // Create and verify socket
+    // Create and verify socket------------------------------------
     server_socket = socket(AF_INET, SOCK_STREAM, 6);
 	if (server_socket == INVALID_SOCKET)
         wprintf(L"socket function failed with error = %d\n", WSAGetLastError() );
     else
         printf("Socket successfully created..\n");
-
-    // Assign IP and port
+    //Registering Channels------------------------------------------
+    RGCH();
+    //Registering Members-------------------------------------------
+    RGMM();
+    // Assign IP and port-------------------------------------------
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = htonl(INADDR_ANY);
     server.sin_port = htons(PORT);
 
-    // Bind newly created socket to given IP and verify
+    // Bind newly created socket to given IP and verify-------------
     if ((bind(server_socket, (SA *)&server, sizeof(server))) != 0)
     {
         printf("Socket binding failed...\n");
