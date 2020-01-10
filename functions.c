@@ -11,6 +11,8 @@
 #include "cJSON.h"
 #include "cJSON.c"
 
+#define INT_MAX 100000
+
 int server_socket, client_socket;
 struct sockaddr_in server, client;
 /*
@@ -23,6 +25,7 @@ struct member {
     char name[128];
     char token[31];
     char chnlin[50];
+    int lastmsgrcvd;
 }memon[1000];
 int lastmem = -1;
 
@@ -38,7 +41,7 @@ void RGCH(){
     struct dirent* in_file;
     FILE *fp;
     cJSON *root;
-    char *chname,line[10000],route[150];
+    char *chname,line[INT_MAX],route[150];
     if (NULL == (FD = opendir("./resources/channels")))
     {
         printf("Error : Failed to open input directory - %s\n", strerror(errno));
@@ -64,7 +67,7 @@ void RGCH(){
             strcat(chnlon[lastchnl].name,chname);
             chnlon[lastchnl].mmbronline=-1;
             chnlon[lastchnl].mmbrids[0]=-1;
-            printf("%s Successfully registered.\n",chname);
+            printf("Channel \"%s\" Successfully registered.\n",chname);
         }
     }
     free(chname);
@@ -77,7 +80,7 @@ void RGMM(){
     struct dirent* in_file;
     FILE *fp;
     cJSON *root;
-    char *mmname,line[10000],route[150];
+    char *mmname,line[INT_MAX],route[150];
     if (NULL == (FD = opendir("./resources/members")))
     {
         printf("Error : Failed to open input directory - %s\n", strerror(errno));
@@ -103,7 +106,8 @@ void RGMM(){
             strcat(memon[lastmem].name,mmname);
             strcat(memon[lastmem].token,"\0");
             strcat(memon[lastmem].chnlin,"\0");
-            printf("%s Successfully registered.\n",mmname);
+            memon[lastmem].lastmsgrcvd= -1;
+            printf("User \"%s\" Successfully registered.\n",mmname);
         }
     }
     cJSON_Delete(root);
@@ -170,6 +174,8 @@ int createaccount(char buff[]);
 int nwchnnl(char buff[]);
 int JoinCh(char buff[]);
 int SendMsg(char buff[]);
+int refresh(char buff[]);
+
 int readoprate()
 {
     char buffer[1000],msg[150];
@@ -180,6 +186,7 @@ int readoprate()
     else if(!strncmp(buffer,"create channel",14))nwchnnl(buffer);
     else if(!strncmp(buffer,"join channel",12))JoinCh(buffer);
     else if(!strncmp(buffer,"send",4))SendMsg(buffer);
+    else if(!strncmp(buffer,"refresh",7))refresh(buffer);
     else   {
         sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
@@ -203,7 +210,8 @@ int createaccount(char buff[]) {
         strcat(memon[lastmem].name,username);
         strcat(memon[lastmem].token,"\0");
         strcat(memon[lastmem].chnlin,"\0");
-        printf("%s Successfully registered.\n",username);
+        memon[lastmem].lastmsgrcvd= -1;
+        printf("User \"%s\" Successfully registered.\n",username);
         fp = fopen(route,"w");
         fprintf(fp,"{\"username\":\"%s\",\"password\":\"%s\"}\n",username,password);
         sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
@@ -315,7 +323,7 @@ int nwchnnl(char buff[]){
 //Join a Channel----------------------------------------------------------------------------------------------------------------------
 int JoinCh(char buff[])
 {
-    char chnm[64],tkn[31],msg[500],route[150],line[10000];
+    char chnm[64],tkn[31],msg[500],route[150],line[INT_MAX];
     int chid,mmid;
     FILE *fp;
 
@@ -362,7 +370,7 @@ int JoinCh(char buff[])
 //Send Messages-----------------------------------------------------------------------------------------------------------------------
 int SendMsg(char buff[])
 {
-    char tkn[31],msg[500],route[300],line[10000];
+    char tkn[31],msg[500],route[300],line[INT_MAX];
     int chid,mmid;
     FILE *fp;
     sscanf(buff,"%*s %[^','], %s",msg,tkn);
@@ -405,3 +413,44 @@ int SendMsg(char buff[])
     return 0;
 }
 //Refresh-----------------------------------------------------------------------------------------------------------------------------
+int refresh(char buff[])
+{
+    char tkn[31],msg[INT_MAX],route[300],line[INT_MAX];
+    int mmid,chid,lmr,msgcount; /*LMR : Last Message Received*/
+    FILE *fp;
+    sscanf(buff,"%*s %s",tkn);
+    mmid = FindMemmberIDbyToken(tkn);
+    chid = FindChannelByName(memon[mmid].chnlin);
+    lmr = memon[mmid].lastmsgrcvd;
+    //Read Previous Messages-------------------------------------------------
+    sprintf(route,"./resources/channels/%s.channel.hata",chnlon[chid].name);
+    fp = fopen(route,"r");
+    fgets(line,sizeof line,fp);
+    fclose(fp);
+    cJSON *sendroot,*sendmessages,*sendmessage;
+    cJSON *root = cJSON_Parse(line);
+    cJSON *messages,*message;
+    messages = cJSON_GetObjectItem(root,"messages");
+    msgcount = cJSON_GetArraySize(messages);
+
+    //Constructing a JSON to be sent------------------------------------------
+    sendroot = cJSON_CreateObject();
+    sendmessages = cJSON_CreateArray();
+    cJSON_AddItemToObject(sendroot, "type", cJSON_CreateString("List"));
+    cJSON_AddItemToObject(sendroot, "content", sendmessages);
+
+    for(int i=lmr+1;i<msgcount;i++){
+        message = cJSON_GetArrayItem(messages,i);
+        char *sender = cJSON_GetObjectItem(message,"sender")->valuestring;
+        char *mssssg = cJSON_GetObjectItem(message,"message")->valuestring;
+        cJSON_AddItemToArray(sendmessages, sendmessage = cJSON_CreateObject());
+        cJSON_AddItemToObject(sendmessage, "sender", cJSON_CreateString(sender));
+        cJSON_AddItemToObject(sendmessage,"content", cJSON_CreateString(mssssg));
+    }
+    memon[mmid].lastmsgrcvd = msgcount-1;
+    sprintf(msg,"%s",cJSON_PrintUnformatted(sendroot));
+    send(client_socket, msg, sizeof(msg)+1, 0);
+    cJSON_Delete(sendroot);
+    cJSON_Delete(root);
+    return 0;
+}
