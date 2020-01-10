@@ -23,6 +23,12 @@ struct sockaddr_in server, client;
 05. Private chat
 06. group
 */
+
+/*
+Bugs :
+1. two login together : Login have to use FindMemberByName!
+2. there is a big problem in refreshing
+*/
 struct member {
     char name[128];
     char token[31];
@@ -67,7 +73,7 @@ void RGCH(){
             root = cJSON_Parse(line);
             chname = cJSON_GetObjectItem(root,"chname")->valuestring;
             lastchnl++;
-            strcat(chnlon[lastchnl].name,chname);
+            strcpy(chnlon[lastchnl].name,chname);
             chnlon[lastchnl].mmbronline=-1;
             chnlon[lastchnl].mmbrids[0]=-1;
             printf("Channel \"%s\" Successfully registered.\n",chname);
@@ -83,7 +89,6 @@ void RGMM(){
     struct dirent* in_file;
     FILE *fp;
     cJSON *root;
-    int lastmem = -1;
     char *mmname,line[INT_MAX],route[150];
     if (NULL == (FD = opendir("./resources/members")))
     {
@@ -107,9 +112,9 @@ void RGMM(){
             root = cJSON_Parse(line);
             mmname = cJSON_GetObjectItem(root,"username")->valuestring;
             lastmem++;
-            strcat(memon[lastmem].name,mmname);
-            strcat(memon[lastmem].token,"\0");
-            strcat(memon[lastmem].chnlin,"\0");
+            strcpy(memon[lastmem].name,mmname);
+            strcpy(memon[lastmem].token,"\0");
+            strcpy(memon[lastmem].chnlin,"\0");
             memon[lastmem].lastmsgrcvd= -1;
             printf("User \"%s\" Successfully registered.\n",mmname);
         }
@@ -164,8 +169,16 @@ int FindMemmberIDbyToken(char *tkn)
             return i;
         }
     }
-    printf("%s -> %s\n",memon[0].token,tkn);
-    printf("%s -> %s\n",memon[1].token,tkn);
+    return -1;
+}
+//Find Member by UserName---------------------------------------------------------------------------------------------------
+int FindMemberIDByUsername(char username[])
+{
+    for(int i=0;i<=lastmem;i++){
+        if(!strcmp(memon[i].name,username)){
+            return i;
+        }
+    }
     return -1;
 }
 //Find Channel By ID------------------------------------------------------------------------------------------------------------------
@@ -219,9 +232,9 @@ int createaccount(char buff[]) {
     }
     else{
         lastmem++;
-        strcat(memon[lastmem].name,username);
-        strcat(memon[lastmem].token,"\0");
-        strcat(memon[lastmem].chnlin,"\0");
+        strcpy(memon[lastmem].name,username);
+        strcpy(memon[lastmem].token,"\0");
+        strcpy(memon[lastmem].chnlin,"\0");
         memon[lastmem].lastmsgrcvd= -1;
         printf("User \"%s\" Successfully registered.\n",username);
         fp = fopen(route,"w");
@@ -237,11 +250,13 @@ int createaccount(char buff[]) {
 int login(char buff[]){
     char username[50],password[65],*content,line[150],msg[500];
     char route[500];
+    int mmid;
     FILE *fp;
     sscanf(buff,"%*s %[^','], %s",username,password);
     sprintf(route,"./resources/members/%s.user.hata",username);
-    //If File Exist---------------------------------------------------------
-    if(access(route,F_OK)!=-1){
+    mmid = FindMemberIDByUsername(username);
+    //If Member Exist---------------------------------------------------------
+    if(mmid != -1){
         fp = fopen(route,"r");
         fgets(line,sizeof line,fp);
         fclose(fp);
@@ -249,7 +264,7 @@ int login(char buff[]){
         content = cJSON_GetObjectItem(root,"password")->valuestring;
         if(!strcmp(content,password)){
             content = randstring();
-            strcat(memon[++lastmem].token,content);
+            strcat(memon[mmid].token,content);
             sprintf(msg,"{\"type\":\"Successful\",\"content\":\"%s\"}",content);
             send(client_socket, msg, sizeof(msg)+1, 0);
         }
@@ -259,12 +274,13 @@ int login(char buff[]){
             send(client_socket, msg, sizeof(msg)+1, 0);
         }
     }
-    //If File Doesn't Exist-----------------------------------------------------
-    else {
+    //If Member Doesn't Exist-----------------------------------------------------
+    else if(mmid == -1) {
         //Making message and send--------------------------------------------------
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"This UserName isn't Created yet!\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
     }
+
     return 0;
 }
 //Create New Channel--------------------------------------------------------------------------------------------------------
@@ -289,12 +305,12 @@ int nwchnnl(char buff[]){
         else{
             //Setting Values for Channel and it's first member
             makerid = FindMemmberIDbyToken(tkn);
-            strcat(memon[makerid].chnlin,chnlname);
+            strcpy(memon[makerid].chnlin,chnlname);
             fp = fopen(route,"w");
             lastchnl++;
             chnlon[lastchnl].mmbronline = 0;
             chnlon[lastchnl].mmbrids[chnlon[lastchnl].mmbronline]=makerid;
-            strcat(chnlon[lastchnl].name,chnlname);
+            strcpy(chnlon[lastchnl].name,chnlname);
             //Creating JSON in Favor of Saving it in a file--------------------------------
             cJSON *root, *messages, *message;
             /* create root node and array */
@@ -353,7 +369,7 @@ int JoinCh(char buff[])
         return 0;
     }
     chnlon[chid].mmbrids[++(chnlon[chid].mmbronline)]=mmid;
-    strcat(memon[mmid].chnlin,chnm);
+    strcpy(memon[mmid].chnlin,chnm);
 
     //Reading Latest channel file
     sprintf(route,"./resources/channels/%s.channel.hata",chnlon[chid].name);
@@ -419,6 +435,7 @@ int SendMsg(char buff[])
     fp = fopen(route,"w");
     fprintf(fp,"%s",cJSON_PrintUnformatted(root));
     fclose(fp);
+    free(msg);
     cJSON_Delete(root);
     sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
     send(client_socket, msg, sizeof(msg)+1, 0);
@@ -461,6 +478,7 @@ int refresh(char buff[])
     }
     memon[mmid].lastmsgrcvd = msgcount-1;
     sprintf(msg,"%s",cJSON_PrintUnformatted(sendroot));
+    printf("%s\n",cJSON_PrintUnformatted(sendroot));
     send(client_socket, msg, sizeof(msg)+1, 0);
     cJSON_Delete(sendroot);
     cJSON_Delete(root);
@@ -505,7 +523,7 @@ int lvchnl(char buff[])
     for(int j=i;j<chnlon[chid].mmbronline;j++)
         chnlon[chid].mmbrids[j] = chnlon[chid].mmbrids[j+1];
     chnlon[chid].mmbronline--;
-    strcat(memon[mmid].chnlin,"\0");
+    strcpy(memon[mmid].chnlin,"\0");
     memon[mmid].lastmsgrcvd = -1;
 
     //Editing Channel file---------------------------------------------------------

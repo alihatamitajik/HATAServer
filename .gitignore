@@ -26,3 +26,9 @@ Server.layout
 resources/channels/ads.channel.hata
 resources/channels/helloworld.channel.hata
 resources/channels/assholes.channel.hata
+resources/members/5.user.hata
+resources/members/asshole.user.hata
+resources/channels/a2.channel.hata
+resources/channels/.channel.hata
+resources/members/5.user.hata
+*.hata
