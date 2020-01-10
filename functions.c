@@ -83,6 +83,7 @@ void RGMM(){
     struct dirent* in_file;
     FILE *fp;
     cJSON *root;
+    int lastmem = -1;
     char *mmname,line[INT_MAX],route[150];
     if (NULL == (FD = opendir("./resources/members")))
     {
@@ -159,8 +160,12 @@ int IsValidAuthToken(char *tkn){
 int FindMemmberIDbyToken(char *tkn)
 {
     for(int i=0;i<=lastmem;i++){
-        if(!strcmp(memon[i].token,tkn))return i;
+        if(!strcmp(memon[i].token,tkn)){
+            return i;
+        }
     }
+    printf("%s -> %s\n",memon[0].token,tkn);
+    printf("%s -> %s\n",memon[1].token,tkn);
     return -1;
 }
 //Find Channel By ID------------------------------------------------------------------------------------------------------------------
@@ -179,6 +184,7 @@ int JoinCh(char buff[]);
 int SendMsg(char buff[]);
 int refresh(char buff[]);
 int chnlmmbr(char buff[]);
+int lvchnl(char buff[]);
 
 int readoprate()
 {
@@ -192,6 +198,7 @@ int readoprate()
     else if(!strncmp(buffer,"send",4))SendMsg(buffer);
     else if(!strncmp(buffer,"refresh",7))refresh(buffer);
     else if(!strncmp(buffer,"channel members",15))chnlmmbr(buffer);
+    else if(!strncmp(buffer,"leave",5))lvchnl(buffer);
     else   {
         sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
@@ -242,7 +249,7 @@ int login(char buff[]){
         content = cJSON_GetObjectItem(root,"password")->valuestring;
         if(!strcmp(content,password)){
             content = randstring();
-            strcat(memon[lastmem].token,content);
+            strcat(memon[++lastmem].token,content);
             sprintf(msg,"{\"type\":\"Successful\",\"content\":\"%s\"}",content);
             send(client_socket, msg, sizeof(msg)+1, 0);
         }
@@ -482,4 +489,48 @@ int chnlmmbr(char buff[])
      send(client_socket, msg, sizeof(msg)+1, 0);
      cJSON_Delete(sendroot);
      return 0;
+}
+//Leave Channel ----------------------------------------------------------------------------------------------------------------------
+int lvchnl(char buff[])
+{
+    char tkn[31],msg[50],route[300],line[INT_MAX];
+    sscanf(buff,"%*s %s",tkn);
+    int mmid,chid;
+    FILE *fp;
+
+    mmid = FindMemmberIDbyToken(tkn);
+    chid = FindChannelByName(memon[mmid].chnlin);
+    int i=0;
+    while(chnlon[chid].mmbrids[i] != mmid)i++;
+    for(int j=i;j<chnlon[chid].mmbronline;j++)
+        chnlon[chid].mmbrids[j] = chnlon[chid].mmbrids[j+1];
+    chnlon[chid].mmbronline--;
+    strcat(memon[mmid].chnlin,"\0");
+    memon[mmid].lastmsgrcvd = -1;
+
+    //Editing Channel file---------------------------------------------------------
+    sprintf(route,"./resources/channels/%s.channel.hata",chnlon[chid].name);
+    fp = fopen(route,"r");
+    fgets(line,sizeof line,fp);
+    fclose(fp);
+
+    //Adding new message to the array in channel file------------------------------
+    cJSON *root = cJSON_Parse(line);
+    cJSON *msg_array,*item;
+    msg_array = cJSON_GetObjectItem(root,"messages");
+    item = cJSON_CreateObject();
+    cJSON_AddItemToObject(item, "sender", cJSON_CreateString("SERVER"));
+    sprintf(msg,"%s Left",memon[mmid].name);
+    cJSON_AddItemToObject(item, "message", cJSON_CreateString(msg));
+    cJSON_AddItemToArray(msg_array, item);
+
+    //REWrite new JSON in the file--------------------------------------------------
+    fp = fopen(route,"w");
+    fprintf(fp,"%s",cJSON_PrintUnformatted(root));
+    fclose(fp);
+    cJSON_Delete(root);
+
+    sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+    send(client_socket, msg, sizeof(msg)+1, 0);
+    return 0;
 }
