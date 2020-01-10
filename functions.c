@@ -62,7 +62,7 @@ void RGCH(){
             chname = cJSON_GetObjectItem(root,"chname")->valuestring;
             lastchnl++;
             strcat(chnlon[lastchnl].name,chname);
-            chnlon[lastchnl].mmbronline=0;
+            chnlon[lastchnl].mmbronline=-1;
             chnlon[lastchnl].mmbrids[0]=-1;
             printf("%s Successfully registered.\n",chname);
         }
@@ -143,7 +143,7 @@ char *randstring() {
 }
 //Is Valid Auth Token-----------------------------------------------------------------------------------------------------------------
 int IsValidAuthToken(char *tkn){
-    for(int i=1;i<=lastmem;i++){
+    for(int i=0;i<=lastmem;i++){
         if(!strcmp(memon[i].token,tkn))return 1;
     }
     return 0;
@@ -151,14 +151,24 @@ int IsValidAuthToken(char *tkn){
 //Match Client And Authtoken----------------------------------------------------------------------------------------------------------
 int FindMemmberIDbyToken(char *tkn)
 {
-    for(int i=1;i<=lastmem;i++){
+    for(int i=0;i<=lastmem;i++){
         if(!strcmp(memon[i].token,tkn))return i;
+    }
+    return -1;
+}
+//Find Channel By ID------------------------------------------------------------------------------------------------------------------
+int FindChannelByName(char chnm[])
+{
+    for(int i=0;i<=lastchnl;i++){
+        if(!strcmp(chnlon[i].name,chnm))return i;
     }
     return -1;
 }
 //Read operation Client want----------------------------------------------------------------------------------------------------------------------------------------
 int login(char buff[]);
 int createaccount(char buff[]);
+int nwchnnl(char buff[]);
+int JoinCh(char buff[]);
 int readoprate()
 {
     char buffer[1000];
@@ -167,6 +177,8 @@ int readoprate()
     if(!strncmp(buffer,"login",5))login(buffer);
     else if(!strncmp(buffer,"register",8))createaccount(buffer);
     else if(!strncmp(buffer,"create channel",14))nwchnnl(buffer);
+    else if(!strncmp(buffer,"join channel",12))JoinCh(buffer);
+    printf("%s",memon[chnlon[0].mmbrids[0]].name);
     return 0;
 }
 //Create Account------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -182,6 +194,11 @@ int createaccount(char buff[]) {
         send(client_socket, msg, sizeof(msg)+1, 0);
     }
     else{
+        lastmem++;
+        strcat(memon[lastmem].name,username);
+        strcat(memon[lastmem].token,"\0");
+        strcat(memon[lastmem].chnlin,"\0");
+        printf("%s Successfully registered.\n",username);
         fp = fopen(route,"w");
         fprintf(fp,"{\"username\":\"%s\",\"password\":\"%s\"}\n",username,password);
         sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
@@ -207,8 +224,6 @@ int login(char buff[]){
         content = cJSON_GetObjectItem(root,"password")->valuestring;
         if(!strcmp(content,password)){
             content = randstring();
-            lastmem++;
-            strcat(memon[lastmem].name,username);
             strcat(memon[lastmem].token,content);
             sprintf(msg,"{\"type\":\"Successful\",\"content\":\"%s\"}",content);
             send(client_socket, msg, sizeof(msg)+1, 0);
@@ -252,8 +267,8 @@ int nwchnnl(char buff[]){
             strcat(memon[makerid].chnlin,chnlname);
             fp = fopen(route,"w");
             lastchnl++;
-            chnlon[lastchnl].mmbronline = 1;
-            chnlon[lastchnl].mmbrids[chnlon[lastchnl].mmbronline-1]=makerid;
+            chnlon[lastchnl].mmbronline = 0;
+            chnlon[lastchnl].mmbrids[chnlon[lastchnl].mmbronline]=makerid;
             strcat(chnlon[lastchnl].name,chnlname);
             //Creating JSON in Favor of Saving it in a file--------------------------------
             cJSON *root, *messages, *message;
@@ -289,5 +304,30 @@ int nwchnnl(char buff[]){
         send(client_socket, msg, sizeof(msg)+1, 0);
         return 0;
     }
+    return 0;
 
+}
+//Join a Channel----------------------------------------------------------------------------------------------------------------------
+int JoinCh(char buff[])
+{
+    char chnm[64],tkn[31],msg[500],temp[300];
+    int chid,mmid;
+    sscanf(buff,"%*s %*s %[^','], %s",chnm,tkn);
+    chid = FindChannelByName(chnm);
+    mmid = FindMemmberIDbyToken(tkn);
+    if(chid == -1){
+        sprintf(msg,"{\"type\":\"Error\",\"content\":\"There isn't any channel named %s.\"}",chnm);
+        send(client_socket, msg, sizeof(msg)+1, 0);
+        return 0;
+    }
+    if(mmid == -1){
+        sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
+        send(client_socket, msg, sizeof(msg)+1, 0);
+        return 0;
+    }
+    chnlon[chid].mmbrids[++(chnlon->mmbronline)]=mmid;
+    strcat(memon[mmid].chnlin,chnm);
+    sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+    send(client_socket, msg, sizeof(msg)+1, 0);
+    return 0;
 }
