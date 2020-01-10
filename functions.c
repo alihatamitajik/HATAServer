@@ -171,6 +171,11 @@ int FindMemmberIDbyToken(char *tkn)
     }
     return -1;
 }
+//Already Logged-in ??-------------------------------------------------------------------------------------------------------
+int AlreadyLoggedIn(int mmid)
+{
+    return strcmp(memon[mmid].token,"\0");
+}
 //Find Member by UserName---------------------------------------------------------------------------------------------------
 int FindMemberIDByUsername(char username[])
 {
@@ -198,6 +203,7 @@ int SendMsg(char buff[]);
 int refresh(char buff[]);
 int chnlmmbr(char buff[]);
 int lvchnl(char buff[]);
+int logout(char buff[]);
 
 int readoprate()
 {
@@ -212,8 +218,9 @@ int readoprate()
     else if(!strncmp(buffer,"refresh",7))refresh(buffer);
     else if(!strncmp(buffer,"channel members",15))chnlmmbr(buffer);
     else if(!strncmp(buffer,"leave",5))lvchnl(buffer);
+    else if(!strncmp(buffer,"logout",6))logout(buffer);
     else   {
-        sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+        sprintf(msg,"{\"type\":\"Error\",\"content\":\"Conflicting Command...\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
     }
     return 0;
@@ -257,21 +264,28 @@ int login(char buff[]){
     mmid = FindMemberIDByUsername(username);
     //If Member Exist---------------------------------------------------------
     if(mmid != -1){
-        fp = fopen(route,"r");
-        fgets(line,sizeof line,fp);
-        fclose(fp);
-        cJSON *root = cJSON_Parse(line);
-        content = cJSON_GetObjectItem(root,"password")->valuestring;
-        if(!strcmp(content,password)){
-            content = randstring();
-            strcat(memon[mmid].token,content);
-            sprintf(msg,"{\"type\":\"Successful\",\"content\":\"%s\"}",content);
+        if(AlreadyLoggedIn(mmid)){
+            //Making message and send--------------------------------------------------
+            sprintf(msg,"{\"type\":\"Error\",\"content\":\"Already Logged In\"}");
             send(client_socket, msg, sizeof(msg)+1, 0);
         }
-        else {
-            //Making message and send--------------------------------------------------
-            sprintf(msg,"{\"type\":\"Error\",\"content\":\"Wrong Password\"}");
-            send(client_socket, msg, sizeof(msg)+1, 0);
+        else{
+            fp = fopen(route,"r");
+            fgets(line,sizeof line,fp);
+            fclose(fp);
+            cJSON *root = cJSON_Parse(line);
+            content = cJSON_GetObjectItem(root,"password")->valuestring;
+            if(!strcmp(content,password)){
+                content = randstring();
+                strcat(memon[mmid].token,content);
+                sprintf(msg,"{\"type\":\"Successful\",\"content\":\"%s\"}",content);
+                send(client_socket, msg, sizeof(msg)+1, 0);
+            }
+            else {
+                //Making message and send--------------------------------------------------
+                sprintf(msg,"{\"type\":\"Error\",\"content\":\"Wrong Password\"}");
+                send(client_socket, msg, sizeof(msg)+1, 0);
+            }
         }
     }
     //If Member Doesn't Exist-----------------------------------------------------
@@ -478,7 +492,6 @@ int refresh(char buff[])
     }
     memon[mmid].lastmsgrcvd = msgcount-1;
     sprintf(msg,"%s",cJSON_PrintUnformatted(sendroot));
-    printf("%s\n",cJSON_PrintUnformatted(sendroot));
     send(client_socket, msg, sizeof(msg)+1, 0);
     cJSON_Delete(sendroot);
     cJSON_Delete(root);
@@ -487,7 +500,7 @@ int refresh(char buff[])
 //Channel Members---------------------------------------------------------------------------------------------------------------------
 int chnlmmbr(char buff[])
 {
-     char tkn[31],msg[INT_MAX],route[300];
+     char tkn[31],msg[INT_MAX];
      sscanf(buff,"%*s %*s %s",tkn);
      int mmid,chid,mmcnt;
      mmid = FindMemmberIDbyToken(tkn);
@@ -518,37 +531,65 @@ int lvchnl(char buff[])
 
     mmid = FindMemmberIDbyToken(tkn);
     chid = FindChannelByName(memon[mmid].chnlin);
-    int i=0;
-    while(chnlon[chid].mmbrids[i] != mmid)i++;
-    for(int j=i;j<chnlon[chid].mmbronline;j++)
-        chnlon[chid].mmbrids[j] = chnlon[chid].mmbrids[j+1];
-    chnlon[chid].mmbronline--;
-    strcpy(memon[mmid].chnlin,"\0");
-    memon[mmid].lastmsgrcvd = -1;
+    if(mmid != -1){
+        int i=0;
+        while(chnlon[chid].mmbrids[i] != mmid)i++;
+        for(int j=i;j<chnlon[chid].mmbronline;j++)
+            chnlon[chid].mmbrids[j] = chnlon[chid].mmbrids[j+1];
+        chnlon[chid].mmbronline--;
+        strcpy(memon[mmid].chnlin,"\0");
+        memon[mmid].lastmsgrcvd = -1;
 
-    //Editing Channel file---------------------------------------------------------
-    sprintf(route,"./resources/channels/%s.channel.hata",chnlon[chid].name);
-    fp = fopen(route,"r");
-    fgets(line,sizeof line,fp);
-    fclose(fp);
+        //Editing Channel file---------------------------------------------------------
+        sprintf(route,"./resources/channels/%s.channel.hata",chnlon[chid].name);
+        fp = fopen(route,"r");
+        fgets(line,sizeof line,fp);
+        fclose(fp);
 
-    //Adding new message to the array in channel file------------------------------
-    cJSON *root = cJSON_Parse(line);
-    cJSON *msg_array,*item;
-    msg_array = cJSON_GetObjectItem(root,"messages");
-    item = cJSON_CreateObject();
-    cJSON_AddItemToObject(item, "sender", cJSON_CreateString("SERVER"));
-    sprintf(msg,"%s Left",memon[mmid].name);
-    cJSON_AddItemToObject(item, "message", cJSON_CreateString(msg));
-    cJSON_AddItemToArray(msg_array, item);
+        //Adding new message to the array in channel file------------------------------
+        cJSON *root = cJSON_Parse(line);
+        cJSON *msg_array,*item;
+        msg_array = cJSON_GetObjectItem(root,"messages");
+        item = cJSON_CreateObject();
+        cJSON_AddItemToObject(item, "sender", cJSON_CreateString("SERVER"));
+        sprintf(msg,"%s Left",memon[mmid].name);
+        cJSON_AddItemToObject(item, "message", cJSON_CreateString(msg));
+        cJSON_AddItemToArray(msg_array, item);
 
-    //REWrite new JSON in the file--------------------------------------------------
-    fp = fopen(route,"w");
-    fprintf(fp,"%s",cJSON_PrintUnformatted(root));
-    fclose(fp);
-    cJSON_Delete(root);
+        //REWrite new JSON in the file--------------------------------------------------
+        fp = fopen(route,"w");
+        fprintf(fp,"%s",cJSON_PrintUnformatted(root));
+        fclose(fp);
+        cJSON_Delete(root);
 
-    sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
-    send(client_socket, msg, sizeof(msg)+1, 0);
+        sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+        send(client_socket, msg, sizeof(msg)+1, 0);
+        return 0;
+    }
+    else {
+        sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
+        send(client_socket, msg, sizeof(msg)+1, 0);
+        return 0;
+    }
+    return 0;
+}
+//Logout--------------------------------------------------------------------------------------------------------------------
+int logout(char buff[])
+{
+    char tkn[31],msg[150];
+    sscanf(buff,"%*s %s",tkn);
+    int mmid;
+    mmid = FindMemmberIDbyToken(tkn);
+    if(mmid != -1){
+        strcpy(memon[mmid].token,"\0");
+        sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+        send(client_socket, msg, sizeof(msg)+1, 0);
+        return 0;
+    }
+    else{
+        sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
+        send(client_socket, msg, sizeof(msg)+1, 0);
+        return 0;
+    }
     return 0;
 }
