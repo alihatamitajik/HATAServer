@@ -34,7 +34,7 @@ int main()
     // Create and verify socket------------------------------------
     server_socket = socket(AF_INET, SOCK_STREAM, 6);
 	if (server_socket == INVALID_SOCKET)
-        wprintf(L"socket function failed with error = %d\n", WSAGetLastError() );
+        wprintf("socket function failed with error = %d\n", WSAGetLastError() );
     else
         printf("Socket successfully created..\n");
     //Registering Channels------------------------------------------

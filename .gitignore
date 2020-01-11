@@ -32,3 +32,5 @@ resources/channels/a2.channel.hata
 resources/channels/.channel.hata
 resources/members/5.user.hata
 *.hata
+bin/Release/libgcc_s_dw2-1.dll
+bin/Release/README.txt
