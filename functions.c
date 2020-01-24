@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <sys/types.h>
+#include <time.h>
 #include "cJSON.h"
 #include "cJSON.c"
 
@@ -76,9 +77,13 @@ void RGCH(){
             strcpy(chnlon[lastchnl].name,chname);
             chnlon[lastchnl].mmbronline=-1;
             chnlon[lastchnl].mmbrids[0]=-1;
-            printf("Channel \"%s\" Successfully registered.\n",chname);
         }
     }
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    printf("[%4d/%02d/%02d][%02d:%02d:%02d] | All Channels Registered Successfully\n"
+           ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+           ,tm.tm_hour,tm.tm_min,tm.tm_sec);
     free(chname);
     cJSON_Delete(root);
 
@@ -116,9 +121,13 @@ void RGMM(){
             strcpy(memon[lastmem].token,"\0");
             strcpy(memon[lastmem].chnlin,"\0");
             memon[lastmem].lastmsgrcvd= -1;
-            printf("User \"%s\" Successfully registered.\n",mmname);
         }
     }
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    printf("[%4d/%02d/%02d][%02d:%02d:%02d] | All Members Registered Successfully\n"
+           ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+           ,tm.tm_hour,tm.tm_min,tm.tm_sec);
     cJSON_Delete(root);
 }
 //AuthToken Generator-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -209,7 +218,21 @@ int readoprate()
 {
     char buffer[1000],msg[150];
     memset(buffer,0,sizeof(buffer));
+    struct tm tm;
+
+    struct timeval timeout;
+    timeout.tv_sec = 99;
+    timeout.tv_usec = 0;
+    int TM = setsockopt (client_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,sizeof(timeout));
+
     recv(client_socket, buffer, sizeof(buffer), 0);
+    //Server Log
+    time_t t1 = time(NULL);
+    tm = *localtime(&t1);
+    printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Request Received\n"
+            ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+            ,tm.tm_hour,tm.tm_min,tm.tm_sec
+            ,client_socket);
          if(!strncmp(buffer,"login",5))login(buffer);
     else if(!strncmp(buffer,"register",8))createaccount(buffer);
     else if(!strncmp(buffer,"create channel",14))nwchnnl(buffer);
@@ -219,6 +242,18 @@ int readoprate()
     else if(!strncmp(buffer,"channel members",15))chnlmmbr(buffer);
     else if(!strncmp(buffer,"leave",5))lvchnl(buffer);
     else if(!strncmp(buffer,"logout",6))logout(buffer);
+    else if(TM==0){
+        time_t t2 = time(NULL);
+        tm = *localtime(&t2);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Read Time Out\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
+        sprintf(msg,"{\"type\":\"Error\",\"content\":\"Read Time Out...\"}");
+        send(client_socket, msg, sizeof(msg)+1, 0);
+    }
+
     else   {
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"Conflicting Command...\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
@@ -230,11 +265,18 @@ int createaccount(char buff[]) {
     char username[50],password[65];
     char route[500];
     char msg[500];
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
     FILE *fp;
     sscanf(buff,"%*s %[^','], %s",username,password);
     sprintf(route,"./resources/members/%s.user.hata",username);
     if(access(route,F_OK)!=-1){
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"This UserName is Taken already!\"}");
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[CreateAccount] : Taken Already\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
         send(client_socket, msg, sizeof(msg)+1, 0);
     }
     else{
@@ -248,6 +290,12 @@ int createaccount(char buff[]) {
         fprintf(fp,"{\"username\":\"%s\",\"password\":\"%s\"}\n",username,password);
         sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
         fclose(fp);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Member \"%s\" Successfully Created\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,username);
         send(client_socket, msg, sizeof(msg)+1, 0);
     }
     return 0;
@@ -258,6 +306,8 @@ int login(char buff[]){
     char username[50],password[65],*content,line[150],msg[500];
     char route[500];
     int mmid;
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
     FILE *fp;
     sscanf(buff,"%*s %[^','], %s",username,password);
     sprintf(route,"./resources/members/%s.user.hata",username);
@@ -268,6 +318,11 @@ int login(char buff[]){
             //Making message and send--------------------------------------------------
             sprintf(msg,"{\"type\":\"Error\",\"content\":\"Already Logged In\"}");
             send(client_socket, msg, sizeof(msg)+1, 0);
+            //Server Log
+            printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[LogIn] : Already Logged In\n"
+                    ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                    ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                    ,client_socket);
         }
         else{
             fp = fopen(route,"r");
@@ -280,11 +335,23 @@ int login(char buff[]){
                 strcat(memon[mmid].token,content);
                 sprintf(msg,"{\"type\":\"Successful\",\"content\":\"%s\"}",content);
                 send(client_socket, msg, sizeof(msg)+1, 0);
+                //Server Log
+                printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Logged In | Token : %10s... \n"
+                        ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                        ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                        ,client_socket
+                        ,username
+                        ,content);
             }
             else {
                 //Making message and send--------------------------------------------------
                 sprintf(msg,"{\"type\":\"Error\",\"content\":\"Wrong Password\"}");
                 send(client_socket, msg, sizeof(msg)+1, 0);
+                //Server Log
+                printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[LogIn] : Wrong Pass\n"
+                    ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                    ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                    ,client_socket);
             }
         }
     }
@@ -293,6 +360,11 @@ int login(char buff[]){
         //Making message and send--------------------------------------------------
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"This UserName isn't Created yet!\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[LogIn] : No Such a UserName\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
     }
 
     return 0;
@@ -302,7 +374,8 @@ int nwchnnl(char buff[]){
     char chnlname[64],tkn[31],msg[500],route[500],temp[300],*out;
     int makerid;
     FILE *fp;
-
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
     sscanf(buff,"%*s %*s %[^','], %s",chnlname,tkn);
     sprintf(route,"./resources/channels/%s.channel.hata",chnlname);
     if(IsValidAuthToken(tkn)){
@@ -311,6 +384,11 @@ int nwchnnl(char buff[]){
         if(access(route,F_OK) != -1){
             sprintf(msg,"{\"type\":\"Error\",\"content\":\"A channel is exist with this name already...\"}");
             send(client_socket, msg, sizeof(msg)+1, 0);
+            //Server Log
+            printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[CreateChannel] : Name Already Taken \n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
             return 0;
         }
 
@@ -350,6 +428,12 @@ int nwchnnl(char buff[]){
             cJSON_Delete(root);
             fclose(fp);
             sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+            //Server Log
+            printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Channel \"%s\" Successfully Created\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,chnlname);
             send(client_socket, msg, sizeof(msg)+1, 0);
         }
     }
@@ -357,6 +441,11 @@ int nwchnnl(char buff[]){
     else {
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[CreateChannel] : Authentication Failed\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
         return 0;
     }
     return 0;
@@ -367,6 +456,8 @@ int JoinCh(char buff[])
 {
     char chnm[64],tkn[31],msg[500],route[150],line[INT_MAX];
     int chid,mmid;
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
     FILE *fp;
 
     sscanf(buff,"%*s %*s %[^','], %s",chnm,tkn);
@@ -375,11 +466,22 @@ int JoinCh(char buff[])
     if(chid == -1){
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"There isn't any channel named %s.\"}",chnm);
         send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[JoinChannel] : No Such a \"%s\"\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,chnm);
         return 0;
     }
     if(mmid == -1){
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[JoinChannel] : Authentication Failed\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
         return 0;
     }
     chnlon[chid].mmbrids[++(chnlon[chid].mmbronline)]=mmid;
@@ -406,6 +508,13 @@ int JoinCh(char buff[])
     cJSON_Delete(root);
 
     sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+    //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Joined \"%s\"\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,memon[mmid].name
+                ,chnm);
     send(client_socket, msg, sizeof(msg)+1, 0);
     return 0;
 }
@@ -414,6 +523,8 @@ int SendMsg(char buff[])
 {
     char tkn[31],msg[500],route[300],line[INT_MAX];
     int chid,mmid;
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
     FILE *fp;
     sscanf(buff,"%*s %[^','], %s",msg,tkn);
     //Check if the AuthToken is a valid one----------------------------------------
@@ -421,6 +532,11 @@ int SendMsg(char buff[])
     if(mmid == -1){
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[SendMessage] : Authentication Failed\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
         return 0;
     }
 
@@ -429,6 +545,12 @@ int SendMsg(char buff[])
     if(chid == -1){
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"Invalid Command.\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[EnsMessage] : Invalid Command From \"%s\"\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,memon[mmid].name);
         return 0;
     }
 
@@ -452,6 +574,13 @@ int SendMsg(char buff[])
     free(msg);
     cJSON_Delete(root);
     sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+    //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Send a Message in \"%s\"\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,memon[mmid].name
+                ,chnlon[chid].name);
     send(client_socket, msg, sizeof(msg)+1, 0);
     return 0;
 }
@@ -459,6 +588,8 @@ int SendMsg(char buff[])
 int refresh(char buff[])
 {
     char tkn[31],msg[INT_MAX],route[300],line[INT_MAX];
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
     int mmid,chid,lmr,msgcount; /*LMR : Last Message Received*/
     FILE *fp;
     sscanf(buff,"%*s %s",tkn);
@@ -495,6 +626,12 @@ int refresh(char buff[])
     send(client_socket, msg, sizeof(msg)+1, 0);
     cJSON_Delete(sendroot);
     cJSON_Delete(root);
+    //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Refreshed\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,memon[mmid].name);
     return 0;
 }
 //Channel Members---------------------------------------------------------------------------------------------------------------------
@@ -503,6 +640,8 @@ int chnlmmbr(char buff[])
      char tkn[31],msg[INT_MAX];
      sscanf(buff,"%*s %*s %s",tkn);
      int mmid,chid,mmcnt;
+     time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
      mmid = FindMemmberIDbyToken(tkn);
      chid = FindChannelByName(memon[mmid].chnlin);
      mmcnt = chnlon[chid].mmbronline;
@@ -519,6 +658,13 @@ int chnlmmbr(char buff[])
      sprintf(msg,"%s",cJSON_PrintUnformatted(sendroot));
      send(client_socket, msg, sizeof(msg)+1, 0);
      cJSON_Delete(sendroot);
+     //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Members Sent to \"%s\" \n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,chnlon[chid].name
+                ,memon[mmid].name);
      return 0;
 }
 //Leave Channel ----------------------------------------------------------------------------------------------------------------------
@@ -527,6 +673,8 @@ int lvchnl(char buff[])
     char tkn[31],msg[50],route[300],line[INT_MAX];
     sscanf(buff,"%*s %s",tkn);
     int mmid,chid;
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
     FILE *fp;
 
     mmid = FindMemmberIDbyToken(tkn);
@@ -564,11 +712,23 @@ int lvchnl(char buff[])
 
         sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Left \"%s\"\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,memon[mmid].name
+                ,chnlon[chid].name);
         return 0;
     }
     else {
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[LeaveChannel] : Authentication Failed\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
         return 0;
     }
     return 0;
@@ -576,6 +736,8 @@ int lvchnl(char buff[])
 //Logout--------------------------------------------------------------------------------------------------------------------
 int logout(char buff[])
 {
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
     char tkn[31],msg[150];
     sscanf(buff,"%*s %s",tkn);
     int mmid;
@@ -584,11 +746,22 @@ int logout(char buff[])
         strcpy(memon[mmid].token,"\0");
         sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Logged Out\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,memon[mmid].name);
         return 0;
     }
     else{
         sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[LogOut] : Authentication Failed\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
         return 0;
     }
     return 0;

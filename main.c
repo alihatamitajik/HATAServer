@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <string.h>
 #include <stdbool.h>
+#include <time.h>
 #include "cJSON.h"
 
 #define PORT 12345
@@ -37,10 +38,6 @@ int main()
         wprintf("socket function failed with error = %d\n", WSAGetLastError() );
     else
         printf("Socket successfully created..\n");
-    //Registering Channels------------------------------------------
-    RGCH();
-    //Registering Members-------------------------------------------
-    RGMM();
     // Assign IP and port-------------------------------------------
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
@@ -56,14 +53,21 @@ int main()
     else
         printf("Socket successfully bound..\n");
     // Now server is ready to listen and verify
-        if ((listen(server_socket, 5)) != 0)
-        {
-            printf("Listen failed...\n");
-            exit(0);
-        }
-        else
-        printf("Server listening..\n");
-
+    if ((listen(server_socket, 5)) != 0)
+    {
+        printf("Listen failed...\n");
+        exit(0);
+    }
+    else{
+        time_t t = time(NULL);
+        struct tm tm = *localtime(&t);
+        printf("Server Started [%4d/%02d/%02d][%02d:%02d:%02d]\n",tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec);
+    }
+    //Registering Channels------------------------------------------
+    RGCH();
+    //Registering Members-------------------------------------------
+    RGMM();
+    printf("Listening Now...\n\n");
     while(1){
         // Accept the data packet from client and verify
         int len = sizeof(client);
@@ -72,6 +76,6 @@ int main()
         {
             printf("Server accceptance failed...\n");
         }
-        oprate = readoprate();
+        readoprate();
     }
 }
