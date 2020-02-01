@@ -40,7 +40,7 @@
 	<unistd.h>
 	"cJSON.h"
 
-1579899149 source:d:\educational\university\semester '98-99' (1)\fop\project hatam\02.server\server\hataserver\main.c
+1580552850 source:d:\educational\university\semester '98-99' (1)\fop\project hatam\02.server\server\hataserver\main.c
 	<stdio.h>
 	<winsock2.h>
 	<stdlib.h>
@@ -48,7 +48,7 @@
 	<string.h>
 	<stdbool.h>
 	<time.h>
-	"cJSON.h"
+	"HATA_JSON.h"
 
 1423841002 d:\educational\university\semester '98-99' (1)\fop\project hatam\02.server\server\hataserver\cjson.h
 
@@ -76,4 +76,7 @@
 	<limits.h>
 	<ctype.h>
 	"cJSON.h"
+
+1580500031 d:\educational\university\semester '98-99' (1)\fop\project hatam\02.server\server\hataserver\hata_json.h
+	<stddef.h>
 

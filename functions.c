@@ -77,7 +77,6 @@ void RGCH(){
             strcpy(chnlon[lastchnl].name,chname);
             chnlon[lastchnl].mmbronline=-1;
             chnlon[lastchnl].mmbrids[0]=-1;
-            printf("%s\n",chname);
         }
     }
     time_t t = time(NULL);
@@ -214,6 +213,7 @@ int refresh(char buff[]);
 int chnlmmbr(char buff[]);
 int lvchnl(char buff[]);
 int logout(char buff[]);
+void searchMember(char buff[]);
 
 int readoprate()
 {
@@ -243,6 +243,7 @@ int readoprate()
     else if(!strncmp(buffer,"channel members",15))chnlmmbr(buffer);
     else if(!strncmp(buffer,"leave",5))lvchnl(buffer);
     else if(!strncmp(buffer,"logout",6))logout(buffer);
+    else if(!strncmp(buffer,"member search",13))searchMember(buffer);
     else if(TM==0){
         time_t t2 = time(NULL);
         tm = *localtime(&t2);
@@ -613,6 +614,8 @@ int refresh(char buff[])
     JSON *messages,*message;
     messages = GetObjectItemJSON(root,"messages");
     msgcount = GetArraySizeJSON(messages);
+    char *name = (char *)malloc(61);
+    strcpy(name,memon[mmid].name);
 
     //Constructing a JSON to be sent------------------------------------------
     sendroot = CreateNewObjectJSON();
@@ -625,9 +628,11 @@ int refresh(char buff[])
         char *sender = GetObjectItemJSON(message,"sender")->valuestring;
         char *mssssg = GetObjectItemJSON(message,"message")->valuestring;
         AddItemArrayJSON(sendmessages, sendmessage = CreateNewObjectJSON());
-        AddItemObjectJSON(sendmessage, "sender", CreateNewStringJSON(sender));
+        if(!strcmp(sender,name))AddItemObjectJSON(sendmessage, "sender", CreateNewStringJSON("\t\t\033[0;33m You\033[0m"));
+        else AddItemObjectJSON(sendmessage, "sender", CreateNewStringJSON(sender));
         AddItemObjectJSON(sendmessage,"content", CreateNewStringJSON(mssssg));
     }
+    free(name);
     memon[mmid].lastmsgrcvd = msgcount-1;
     char *out = OutputJSON(sendroot);
     sprintf(msg,"%s",out);
@@ -778,4 +783,59 @@ int logout(char buff[])
         return 0;
     }
     return 0;
+}
+
+//Search Member -------------------------------------------------------------------------------------------
+void searchMember(char buff[])
+{
+    char memnm[64],tkn[31],msg[500];
+    int chid,mmid,mmcnt;
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    sscanf(buff,"%*s %*s %[^','], %s",memnm,tkn);
+    mmid = FindMemmberIDbyToken(tkn);
+    //if member request not found
+    if(mmid == -1){
+        sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
+        send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[SearchMember] : Authentication Failed\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
+        return;
+    }
+    chid = FindChannelByName(memon[mmid].chnlin);
+    /* if member isn't in any channel */
+    if(chid == -1){
+        sprintf(msg,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
+        send(client_socket, msg, sizeof(msg)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[SearchMember] : Authentication Failed\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
+        return;
+    }
+    mmcnt = chnlon[chid].mmbronline;
+    for(int i=0;i<=mmcnt;i++){
+        if(!strcmp(memnm,memon[chnlon[chid].mmbrids[i]].name)){
+            sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
+            send(client_socket, msg, sizeof(msg)+1, 0);
+            printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Search result sent to \"%s\" \n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,memon[mmid].name);
+            return;
+        }
+    }
+    sprintf(msg,"{\"type\":\"Error\",\"content\":\"Not Found\"}");
+    send(client_socket, msg, sizeof(msg)+1, 0);
+    //Server Log
+    printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[SearchMember] : Search Ended With No Result\n"
+            ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+            ,tm.tm_hour,tm.tm_min,tm.tm_sec
+            ,client_socket);
+    return;
 }
