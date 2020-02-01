@@ -34,3 +34,11 @@ resources/members/5.user.hata
 *.hata
 bin/Release/libgcc_s_dw2-1.dll
 bin/Release/README.txt
+Server.depend
+Server.depend
+Server.layout
+Server.depend
+main.c
+Server.layout
+*.layout
+*.depend

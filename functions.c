@@ -9,8 +9,8 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <time.h>
-#include "cJSON.h"
-#include "cJSON.c"
+#include "HATA_JSON.h"
+#include "HATA_JSON.c"
 
 #define INT_MAX 100000
 
@@ -49,7 +49,7 @@ void RGCH(){
     DIR *FD;
     struct dirent* in_file;
     FILE *fp;
-    cJSON *root;
+    JSON *root;
     char *chname,line[INT_MAX],route[150];
 
     if (NULL == (FD = opendir("./resources/channels")))
@@ -71,12 +71,13 @@ void RGCH(){
         }
         else{
             fgets(line,sizeof line,fp);
-            root = cJSON_Parse(line);
-            chname = cJSON_GetObjectItem(root,"chname")->valuestring;
+            root = ParseJSON(line);
+            chname = GetObjectItemJSON(root,"chname")->valuestring;
             lastchnl++;
             strcpy(chnlon[lastchnl].name,chname);
             chnlon[lastchnl].mmbronline=-1;
             chnlon[lastchnl].mmbrids[0]=-1;
+            printf("%s\n",chname);
         }
     }
     time_t t = time(NULL);
@@ -85,7 +86,7 @@ void RGCH(){
            ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
            ,tm.tm_hour,tm.tm_min,tm.tm_sec);
     free(chname);
-    cJSON_Delete(root);
+    DeleteJSON(root);
 
 }
 //Register All Members---------------------------------------------------------------------------------------------------------------------------------------------
@@ -93,7 +94,7 @@ void RGMM(){
     DIR *FD;
     struct dirent* in_file;
     FILE *fp;
-    cJSON *root;
+    JSON *root;
     char *mmname,line[INT_MAX],route[150];
     if (NULL == (FD = opendir("./resources/members")))
     {
@@ -114,8 +115,8 @@ void RGMM(){
         }
         else{
             fgets(line,sizeof line,fp);
-            root = cJSON_Parse(line);
-            mmname = cJSON_GetObjectItem(root,"username")->valuestring;
+            root = ParseJSON(line);
+            mmname = GetObjectItemJSON(root,"username")->valuestring;
             lastmem++;
             strcpy(memon[lastmem].name,mmname);
             strcpy(memon[lastmem].token,"\0");
@@ -128,13 +129,13 @@ void RGMM(){
     printf("[%4d/%02d/%02d][%02d:%02d:%02d] | All Members Registered Successfully\n"
            ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
            ,tm.tm_hour,tm.tm_min,tm.tm_sec);
-    cJSON_Delete(root);
+    DeleteJSON(root);
 }
 //AuthToken Generator-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 char *randstring() {
     int length = 30;
     static int mySeed = 25011984;
-    char *string = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.-#'?!";
+    char *string = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-#'?!";
     size_t stringLen = strlen(string);
     char *randomString = NULL;
 
@@ -328,15 +329,15 @@ int login(char buff[]){
             fp = fopen(route,"r");
             fgets(line,sizeof line,fp);
             fclose(fp);
-            cJSON *root = cJSON_Parse(line);
-            content = cJSON_GetObjectItem(root,"password")->valuestring;
+            JSON *root = ParseJSON(line);
+            content = GetObjectItemJSON(root,"password")->valuestring;
             if(!strcmp(content,password)){
                 content = randstring();
                 strcat(memon[mmid].token,content);
                 sprintf(msg,"{\"type\":\"Successful\",\"content\":\"%s\"}",content);
                 send(client_socket, msg, sizeof(msg)+1, 0);
                 //Server Log
-                printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Logged In | Token : %10s... \n"
+                printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Logged In | Token : %s \n"
                         ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
                         ,tm.tm_hour,tm.tm_min,tm.tm_sec
                         ,client_socket
@@ -404,28 +405,27 @@ int nwchnnl(char buff[]){
             chnlon[lastchnl].mmbrids[chnlon[lastchnl].mmbronline]=makerid;
             strcpy(chnlon[lastchnl].name,chnlname);
             //Creating JSON in Favor of Saving it in a file--------------------------------
-            cJSON *root, *messages, *message;
+            JSON *root, *messages, *message;
             /* create root node and array */
-            root = cJSON_CreateObject();
-            messages = cJSON_CreateArray();
+            root = CreateNewObjectJSON();
+            messages = CreateNewArrayJSON();
 
             /* add cars array to root */
-            cJSON_AddItemToObject(root, "messages", messages);
+            AddItemObjectJSON(root, "messages", messages);
 
             /* add 1st message to cars array */
-            cJSON_AddItemToArray(messages, message = cJSON_CreateObject());
-            cJSON_AddItemToObject(message, "sender", cJSON_CreateString("SERVER"));
+            AddItemArrayJSON(messages, message = CreateNewObjectJSON());
+            AddItemObjectJSON(message, "sender", CreateNewStringJSON("SERVER"));
             sprintf(temp,"%s Created this Channel",memon[makerid].name);
-            cJSON_AddItemToObject(message, "message", cJSON_CreateString(temp));
+            AddItemObjectJSON(message, "message", CreateNewStringJSON(temp));
+            AddItemObjectJSON(root,"chname",CreateNewStringJSON(chnlname));
 
-            cJSON_AddItemToObject(root,"chname",cJSON_CreateString(chnlname));
             /* print everything */
-            out = cJSON_PrintUnformatted(root);
+            out = OutputJSON(root);
             fprintf(fp,"%s",out);
             free(out);
-
             /* free all objects under root and root itself */
-            cJSON_Delete(root);
+            DeleteJSON(root);
             fclose(fp);
             sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
             //Server Log
@@ -493,19 +493,24 @@ int JoinCh(char buff[])
     fgets(line,sizeof line,fp);
     fclose(fp);
     //Adding new message to the array in channel file------------------------------
-    cJSON *root = cJSON_Parse(line);
-    cJSON *msg_array,*item;
-    msg_array = cJSON_GetObjectItem(root,"messages");
-    item = cJSON_CreateObject();
-    cJSON_AddItemToObject(item, "sender", cJSON_CreateString("SERVER"));
+    JSON *root = ParseJSON(line);
+    printf("a");
+    JSON *msg_array,*item;
+    msg_array = GetObjectItemJSON(root,"messages");
+    item = CreateNewObjectJSON();
+    AddItemObjectJSON(item, "sender", CreateNewStringJSON("SERVER"));
     sprintf(msg,"%s Joined",memon[mmid].name);
-    cJSON_AddItemToObject(item, "message", cJSON_CreateString(msg));
-    cJSON_AddItemToArray(msg_array, item);
+    AddItemObjectJSON(item, "message", CreateNewStringJSON(msg));
+    AddItemArrayJSON(msg_array, item);
+    printf("b");
     //REWrite new JSON in the file--------------------------------------------------
     fp = fopen(route,"w");
-    fprintf(fp,"%s",cJSON_PrintUnformatted(root));
+    char *out = OutputJSON(root);
+    fprintf(fp,"%s",out);
+    printf("c");
     fclose(fp);
-    cJSON_Delete(root);
+    free(out);
+    DeleteJSON(root);
 
     sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
     //Server Log
@@ -560,19 +565,21 @@ int SendMsg(char buff[])
     fgets(line,sizeof line,fp);
     fclose(fp);
     //Adding new message to the array in channel file------------------------------
-    cJSON *root = cJSON_Parse(line);
-    cJSON *msg_array,*item;
-    msg_array = cJSON_GetObjectItem(root,"messages");
-    item = cJSON_CreateObject();
-    cJSON_AddItemToObject(item, "sender", cJSON_CreateString(memon[mmid].name));
-    cJSON_AddItemToObject(item, "message", cJSON_CreateString(msg));
-    cJSON_AddItemToArray(msg_array, item);
+    JSON *root = ParseJSON(line);
+    JSON *msg_array,*item;
+    msg_array = GetObjectItemJSON(root,"messages");
+    item = CreateNewObjectJSON();
+    AddItemObjectJSON(item, "sender", CreateNewStringJSON(memon[mmid].name));
+    AddItemObjectJSON(item, "message", CreateNewStringJSON(msg));
+    AddItemArrayJSON(msg_array, item);
     //REWrite new JSON in the file--------------------------------------------------
     fp = fopen(route,"w");
-    fprintf(fp,"%s",cJSON_PrintUnformatted(root));
+    char *out = OutputJSON(root);
+    fprintf(fp,"%s",out);
     fclose(fp);
+    free(out);
     free(msg);
-    cJSON_Delete(root);
+    DeleteJSON(root);
     sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
     //Server Log
         printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Send a Message in \"%s\"\n"
@@ -601,31 +608,33 @@ int refresh(char buff[])
     fp = fopen(route,"r");
     fgets(line,sizeof line,fp);
     fclose(fp);
-    cJSON *sendroot,*sendmessages,*sendmessage;
-    cJSON *root = cJSON_Parse(line);
-    cJSON *messages,*message;
-    messages = cJSON_GetObjectItem(root,"messages");
-    msgcount = cJSON_GetArraySize(messages);
+    JSON *sendroot,*sendmessages,*sendmessage;
+    JSON *root = ParseJSON(line);
+    JSON *messages,*message;
+    messages = GetObjectItemJSON(root,"messages");
+    msgcount = GetArraySizeJSON(messages);
 
     //Constructing a JSON to be sent------------------------------------------
-    sendroot = cJSON_CreateObject();
-    sendmessages = cJSON_CreateArray();
-    cJSON_AddItemToObject(sendroot, "type", cJSON_CreateString("List"));
-    cJSON_AddItemToObject(sendroot, "content", sendmessages);
+    sendroot = CreateNewObjectJSON();
+    sendmessages = CreateNewArrayJSON();
+    AddItemObjectJSON(sendroot, "type", CreateNewStringJSON("List"));
+    AddItemObjectJSON(sendroot, "content", sendmessages);
 
     for(int i=lmr+1;i<msgcount;i++){
-        message = cJSON_GetArrayItem(messages,i);
-        char *sender = cJSON_GetObjectItem(message,"sender")->valuestring;
-        char *mssssg = cJSON_GetObjectItem(message,"message")->valuestring;
-        cJSON_AddItemToArray(sendmessages, sendmessage = cJSON_CreateObject());
-        cJSON_AddItemToObject(sendmessage, "sender", cJSON_CreateString(sender));
-        cJSON_AddItemToObject(sendmessage,"content", cJSON_CreateString(mssssg));
+        message = GetArrayItemJSON(messages,i);
+        char *sender = GetObjectItemJSON(message,"sender")->valuestring;
+        char *mssssg = GetObjectItemJSON(message,"message")->valuestring;
+        AddItemArrayJSON(sendmessages, sendmessage = CreateNewObjectJSON());
+        AddItemObjectJSON(sendmessage, "sender", CreateNewStringJSON(sender));
+        AddItemObjectJSON(sendmessage,"content", CreateNewStringJSON(mssssg));
     }
     memon[mmid].lastmsgrcvd = msgcount-1;
-    sprintf(msg,"%s",cJSON_PrintUnformatted(sendroot));
+    char *out = OutputJSON(sendroot);
+    sprintf(msg,"%s",out);
     send(client_socket, msg, sizeof(msg)+1, 0);
-    cJSON_Delete(sendroot);
-    cJSON_Delete(root);
+    free(out);
+    DeleteJSON(sendroot);
+    DeleteJSON(root);
     //Server Log
         printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Refreshed\n"
                 ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
@@ -646,18 +655,20 @@ int chnlmmbr(char buff[])
      chid = FindChannelByName(memon[mmid].chnlin);
      mmcnt = chnlon[chid].mmbronline;
 
-     cJSON *sendroot,*sendmessages;
+     JSON *sendroot,*sendmessages;
      //Constructing a JSON to be sent------------------------------------------
-     sendroot = cJSON_CreateObject();
-     sendmessages = cJSON_CreateArray();
-     cJSON_AddItemToObject(sendroot, "type", cJSON_CreateString("List"));
-     cJSON_AddItemToObject(sendroot, "content", sendmessages);
+     sendroot = CreateNewObjectJSON();
+     sendmessages = CreateNewArrayJSON();
+     AddItemObjectJSON(sendroot, "type", CreateNewStringJSON("List"));
+     AddItemObjectJSON(sendroot, "content", sendmessages);
      for(int i=0;i<=chnlon[chid].mmbronline;i++){
-        cJSON_AddItemToArray(sendmessages, cJSON_CreateString(memon[chnlon[chid].mmbrids[i]].name));
+        AddItemArrayJSON(sendmessages, CreateNewStringJSON(memon[chnlon[chid].mmbrids[i]].name));
      }
-     sprintf(msg,"%s",cJSON_PrintUnformatted(sendroot));
+     char *out = OutputJSON(sendroot);
+     sprintf(msg,"%s",out);
      send(client_socket, msg, sizeof(msg)+1, 0);
-     cJSON_Delete(sendroot);
+     free(out);
+     DeleteJSON(sendroot);
      //Server Log
         printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | \"%s\" Members Sent to \"%s\" \n"
                 ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
@@ -695,20 +706,22 @@ int lvchnl(char buff[])
         fclose(fp);
 
         //Adding new message to the array in channel file------------------------------
-        cJSON *root = cJSON_Parse(line);
-        cJSON *msg_array,*item;
-        msg_array = cJSON_GetObjectItem(root,"messages");
-        item = cJSON_CreateObject();
-        cJSON_AddItemToObject(item, "sender", cJSON_CreateString("SERVER"));
+        JSON *root = ParseJSON(line);
+        JSON *msg_array,*item;
+        msg_array = GetObjectItemJSON(root,"messages");
+        item = CreateNewObjectJSON();
+        AddItemObjectJSON(item, "sender", CreateNewStringJSON("SERVER"));
         sprintf(msg,"%s Left",memon[mmid].name);
-        cJSON_AddItemToObject(item, "message", cJSON_CreateString(msg));
-        cJSON_AddItemToArray(msg_array, item);
+        AddItemObjectJSON(item, "message", CreateNewStringJSON(msg));
+        AddItemArrayJSON(msg_array, item);
 
         //REWrite new JSON in the file--------------------------------------------------
         fp = fopen(route,"w");
-        fprintf(fp,"%s",cJSON_PrintUnformatted(root));
+        char* out = OutputJSON(root);
+        fprintf(fp,"%s",out);
         fclose(fp);
-        cJSON_Delete(root);
+        free(out);
+        DeleteJSON(root);
 
         sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
         send(client_socket, msg, sizeof(msg)+1, 0);
