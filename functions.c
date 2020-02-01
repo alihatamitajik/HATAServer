@@ -17,6 +17,7 @@
 int server_socket, client_socket;
 struct sockaddr_in server, client;
 /*
+Updates :
 01. forgot your password
 02. Change password
 03. Bio
@@ -25,11 +26,6 @@ struct sockaddr_in server, client;
 06. group
 */
 
-/*
-Bugs :
-1. two login together : Login have to use FindMemberByName!
-2. there is a big problem in refreshing
-*/
 struct member {
     char name[128];
     char token[31];
@@ -214,6 +210,8 @@ int chnlmmbr(char buff[]);
 int lvchnl(char buff[]);
 int logout(char buff[]);
 void searchMember(char buff[]);
+void MessageSearch(char buff[]);
+
 
 int readoprate()
 {
@@ -244,6 +242,7 @@ int readoprate()
     else if(!strncmp(buffer,"leave",5))lvchnl(buffer);
     else if(!strncmp(buffer,"logout",6))logout(buffer);
     else if(!strncmp(buffer,"member search",13))searchMember(buffer);
+    else if(!strncmp(buffer,"message search",14))MessageSearch(buffer);
     else if(TM==0){
         time_t t2 = time(NULL);
         tm = *localtime(&t2);
@@ -495,7 +494,6 @@ int JoinCh(char buff[])
     fclose(fp);
     //Adding new message to the array in channel file------------------------------
     JSON *root = ParseJSON(line);
-    printf("a");
     JSON *msg_array,*item;
     msg_array = GetObjectItemJSON(root,"messages");
     item = CreateNewObjectJSON();
@@ -503,12 +501,10 @@ int JoinCh(char buff[])
     sprintf(msg,"%s Joined",memon[mmid].name);
     AddItemObjectJSON(item, "message", CreateNewStringJSON(msg));
     AddItemArrayJSON(msg_array, item);
-    printf("b");
     //REWrite new JSON in the file--------------------------------------------------
     fp = fopen(route,"w");
     char *out = OutputJSON(root);
     fprintf(fp,"%s",out);
-    printf("c");
     fclose(fp);
     free(out);
     DeleteJSON(root);
@@ -837,5 +833,107 @@ void searchMember(char buff[])
             ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
             ,tm.tm_hour,tm.tm_min,tm.tm_sec
             ,client_socket);
+    return;
+}
+
+//Search Messages-----------------------------------------------------------------------------------------
+int searcher(char str[], char substr[])
+{
+    int n = strlen(str);
+    int m = strlen(substr);
+    int count = 0;
+    //Go through the main str
+    for (int i = 0; i <= n - m; i++)
+    {
+        //Check for same str in main str
+        int j;
+        for (j = 0; j < m; j++)
+            if (str[i+j] != substr[j])
+                break;
+
+        if (j == m)
+        {
+           if(str[i+j]==' '||str[i+j]=='\0')return 1;
+        }
+    }
+    return 0;
+}//Source : HTTPS://WWW.GeeksForGeeks.ORG/frequency-substring-string/
+
+void MessageSearch(char buff[])
+{
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    char tkn[31],searchkey[30],route[150],line[INT_MAX],msg1[300];
+    int mmid,chid;
+    sscanf(buff,"%*s %*s %[^','], %s",searchkey,tkn);
+    mmid = FindMemmberIDbyToken(tkn);
+    /* if member token is not valid */
+    if(mmid == -1){
+        sprintf(msg1,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
+        send(client_socket, msg1, sizeof(msg1)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[SearchMember] : Authentication Failed\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
+        return;
+    }
+
+    chid = FindChannelByName(memon[mmid].chnlin);
+    /* if member isn't in any channel */
+    if(chid == -1){
+        sprintf(msg1,"{\"type\":\"Error\",\"content\":\"Authentication Failed\"}");
+        send(client_socket, msg1, sizeof(msg1)+1, 0);
+        //Server Log
+        printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Error[SearchMember] : Authentication Failed\n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket);
+        return;
+    }
+    /* Creating the out to access the file */
+    sprintf(route,"./resources/channels/%s.channel.hata",chnlon[chid].name);
+    FILE *fp = fopen(route,"r");
+    fgets(line,sizeof line,fp);
+    fclose(fp);
+
+    /* Parse the line into JSON */
+    JSON *sendroot=CreateNewObjectJSON(),*sendmessages=CreateNewArrayJSON();
+    JSON *sendmessage;
+    JSON *root = ParseJSON(line);
+    JSON *messages,*message;
+    char *msg;
+    char *tmp;
+    messages = GetObjectItemJSON(root,"messages");
+    int msgcount = GetArraySizeJSON(messages);
+    /* Looking for search key */
+    for (int i=0;i<msgcount;i++){
+        message = GetArrayItemJSON(messages,i);
+        msg = GetObjectItemJSON(message,"message")->valuestring;
+        if(searcher(msg,searchkey)){
+            sendmessage = CreateNewObjectJSON();
+            tmp = GetObjectItemJSON(message,"sender")->valuestring;
+            AddItemObjectJSON(sendmessage,"sender",CreateNewStringJSON(tmp));
+            tmp = GetObjectItemJSON(message,"message")->valuestring;
+            AddItemObjectJSON(sendmessage,"message",CreateNewStringJSON(tmp));
+            AddItemArrayJSON(sendmessages,sendmessage);
+        }
+    }
+    AddItemObjectJSON(sendroot,"content",sendmessages);
+
+    /* sending the message */
+    msg = OutputJSON(sendroot);
+    send(client_socket, msg, sizeof(msg)+1, 0);
+
+    free(msg);
+    free(tmp);
+    DeleteJSON(root);
+    DeleteJSON(sendroot);
+    /* Server Log */
+    printf("[%4d/%02d/%02d][%02d:%02d:%02d] | Socket :: %3d | Search result sent to \"%s\" \n"
+                ,tm.tm_year+1900,tm.tm_mon +1,tm.tm_mday
+                ,tm.tm_hour,tm.tm_min,tm.tm_sec
+                ,client_socket
+                ,memon[mmid].name);
     return;
 }
