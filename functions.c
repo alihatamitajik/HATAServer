@@ -863,7 +863,7 @@ void MessageSearch(char buff[])
 {
     time_t t = time(NULL);
     struct tm tm = *localtime(&t);
-    char tkn[31],searchkey[30],route[150],line[INT_MAX],msg1[300];
+    char tkn[31],searchkey[30],route[150],line[INT_MAX],msg1[300],sendm[INT_MAX];
     int mmid,chid;
     sscanf(buff,"%*s %*s %[^','], %s",searchkey,tkn);
     mmid = FindMemmberIDbyToken(tkn);
@@ -902,8 +902,8 @@ void MessageSearch(char buff[])
     JSON *sendmessage;
     JSON *root = ParseJSON(line);
     JSON *messages,*message;
-    char *msg;
     char *tmp;
+    char *msg;
     messages = GetObjectItemJSON(root,"messages");
     int msgcount = GetArraySizeJSON(messages);
     /* Looking for search key */
@@ -920,13 +920,17 @@ void MessageSearch(char buff[])
         }
     }
     AddItemObjectJSON(sendroot,"content",sendmessages);
-
+    fp = fopen("temp.txt","w");
     /* sending the message */
-    msg = OutputJSON(sendroot);
-    send(client_socket, msg, sizeof(msg)+1, 0);
+    char *out = OutputJSON(sendroot);
+    fprintf(fp,"%s\n",out);
+    fclose(fp);
+    fp = fopen("temp.txt","r");
+    fgets(sendm,sizeof sendm,fp);
+    fclose(fp);
+    send(client_socket, sendm, sizeof(sendm)+1, 0);
 
-    free(msg);
-    free(tmp);
+    free(out);
     DeleteJSON(root);
     DeleteJSON(sendroot);
     /* Server Log */

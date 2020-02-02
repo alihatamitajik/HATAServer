@@ -42,3 +42,4 @@ main.c
 Server.layout
 *.layout
 *.depend
+*.txt
