@@ -51,9 +51,9 @@ void RGCH(){
     if (NULL == (FD = opendir("./resources/channels")))
     {
         printf("Error : Failed to open input directory - %s\n", strerror(errno));
-        return 1;
+        return;
     }
-    while(in_file = readdir(FD)){
+    while((in_file = readdir(FD))){
         //Ignore Parent and child directories---
         if (!strcmp (in_file->d_name, "."))
             continue;
@@ -94,9 +94,9 @@ void RGMM(){
     if (NULL == (FD = opendir("./resources/members")))
     {
         printf("Error : Failed to open input directory - %s\n", strerror(errno));
-        return 1;
+        return;
     }
-    while(in_file = readdir(FD)){
+    while((in_file = readdir(FD))){
         //Ignore Parent and child directories---
         if (!strcmp (in_file->d_name, "."))
             continue;
@@ -575,7 +575,6 @@ int SendMsg(char buff[])
     fprintf(fp,"%s",out);
     fclose(fp);
     free(out);
-    free(msg);
     DeleteJSON(root);
     sprintf(msg,"{\"type\":\"Successful\",\"content\":\"\"}");
     //Server Log
@@ -662,7 +661,7 @@ int chnlmmbr(char buff[])
      sendmessages = CreateNewArrayJSON();
      AddItemObjectJSON(sendroot, "type", CreateNewStringJSON("List"));
      AddItemObjectJSON(sendroot, "content", sendmessages);
-     for(int i=0;i<=chnlon[chid].mmbronline;i++){
+     for(int i=0;i<=mmcnt;i++){
         AddItemArrayJSON(sendmessages, CreateNewStringJSON(memon[chnlon[chid].mmbrids[i]].name));
      }
      char *out = OutputJSON(sendroot);
@@ -841,7 +840,6 @@ int searcher(char str[], char substr[])
 {
     int n = strlen(str);
     int m = strlen(substr);
-    int count = 0;
     //Go through the main str
     for (int i = 0; i <= n - m; i++)
     {
